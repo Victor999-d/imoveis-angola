@@ -1,0 +1,597 @@
+// Plataforma Digital de Gestão e Arrendamento de Imóveis - Angola
+// Schema Prisma - PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  OWNER
+  CLIENT
+}
+
+enum PropertyStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  CORRECTIONS_REQUESTED
+  APPROVED
+  PUBLISHED
+  REJECTED
+  SUSPENDED
+  RENTED
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  VILLA
+  STUDIO
+  COMMERCIAL
+  LAND
+  OFFICE
+  WAREHOUSE
+}
+
+enum PropertyCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  MIXED
+}
+
+enum ConservationState {
+  NEW
+  EXCELLENT
+  GOOD
+  REGULAR
+  NEEDS_WORK
+}
+
+enum VisitStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  TRANSPORT_TO_ORGANIZE
+  TRANSPORT_ORGANIZED
+  COMPLETED
+  CANCELLED
+}
+
+enum TransportStatus {
+  PENDING
+  ORGANIZED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum InterestStatus {
+  INTERESTED
+  NOT_INTERESTED
+  NEED_MORE_TIME
+}
+
+enum NegotiationStatus {
+  OPEN
+  IN_PROGRESS
+  AGREED
+  CANCELLED
+  EXPIRED
+}
+
+enum ContractStatus {
+  PREPARING
+  PENDING_SIGNATURE
+  SIGNED
+  CANCELLED
+  EXPIRED
+}
+
+enum DealStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  ACCOUNT_CREATED
+  PROPERTY_SUBMITTED
+  PROPERTY_APPROVED
+  PROPERTY_REJECTED
+  CORRECTIONS_REQUESTED
+  VISIT_REQUESTED
+  VISIT_CONFIRMED
+  VISIT_REJECTED
+  TRANSPORT_ORGANIZED
+  VISIT_COMPLETED
+  INTEREST_EXPRESSED
+  NEGOTIATION_PROPOSAL
+  CONTRACT_GENERATED
+  CONTRACT_SIGNED
+  DEAL_COMPLETED
+  COMMISSION_PENDING
+  PAYMENT_CONFIRMED
+  SYSTEM
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  avatarUrl     String?
+  role          Role      @default(CLIENT)
+  emailVerified DateTime?
+  isActive      Boolean   @default(true)
+  isBlocked     Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ownerProfile  OwnerProfile?
+  clientProfile ClientProfile?
+  accounts      Account[]
+  sessions      Session[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  favorites     Favorite[]
+  properties    Property[]       @relation("OwnerProperties")
+  visitsAsClient Visit[]         @relation("ClientVisits")
+  negotiationsAsClient Negotiation[] @relation("ClientNegotiations")
+  contractsAsClient Contract[]   @relation("ClientContracts")
+  dealsAsClient Deal[]           @relation("ClientDeals")
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model OwnerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  biNumber        String?
+  nif             String?
+  address         String?
+  province        String?
+  municipality    String?
+  bankName        String?
+  bankIban        String?
+  companyName     String?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("owner_profiles")
+}
+
+model ClientProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  biNumber        String?
+  nif             String?
+  address         String?
+  province        String?
+  municipality    String?
+  occupation      String?
+  monthlyIncome   Decimal? @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("client_profiles")
+}
+
+model Property {
+  id                String            @id @default(cuid())
+  ownerId           String
+  title             String
+  slug              String            @unique
+  description       String            @db.Text
+  type              PropertyType
+  category          PropertyCategory
+  status            PropertyStatus    @default(DRAFT)
+  province          String
+  municipality      String
+  neighborhood      String
+  address           String
+  latitude          Float?
+  longitude         Float?
+  monthlyPrice      Decimal           @db.Decimal(15, 2)
+  bedrooms          Int               @default(0)
+  bathrooms         Int               @default(0)
+  livingRooms       Int               @default(0)
+  areaSqm           Float?
+  conservationState ConservationState @default(GOOD)
+  isFurnished       Boolean           @default(false)
+  amenities         String[]
+  rejectionReason   String?           @db.Text
+  correctionsNotes  String?           @db.Text
+  approvedAt        DateTime?
+  publishedAt       DateTime?
+  rentedAt          DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  owner             User              @relation("OwnerProperties", fields: [ownerId], references: [id])
+  images            PropertyImage[]
+  documents         PropertyDocument[]
+  favorites         Favorite[]
+  visits            Visit[]
+  negotiations      Negotiation[]
+  contracts         Contract[]
+  deals             Deal[]
+  reviews           PropertyReview[]
+
+  @@index([status])
+  @@index([province, municipality])
+  @@index([monthlyPrice])
+  @@index([type])
+  @@index([ownerId])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id          String   @id @default(cuid())
+  propertyId  String
+  url         String
+  publicId    String?
+  isPrimary   Boolean  @default(false)
+  order       Int      @default(0)
+  alt         String?
+  createdAt   DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@map("property_images")
+}
+
+model PropertyDocument {
+  id          String   @id @default(cuid())
+  propertyId  String
+  name        String
+  type        String
+  url         String
+  publicId    String?
+  mimeType    String?
+  sizeBytes   Int?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@map("property_documents")
+}
+
+model PropertyReview {
+  id          String   @id @default(cuid())
+  propertyId  String
+  userId      String
+  rating      Int
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, userId])
+  @@map("property_reviews")
+}
+
+model Favorite {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@map("favorites")
+}
+
+model Visit {
+  id              String      @id @default(cuid())
+  propertyId      String
+  clientId        String
+  scheduledDate   DateTime
+  scheduledTime   String
+  message         String?     @db.Text
+  status          VisitStatus @default(PENDING)
+  rejectionReason String?
+  suggestedDate   DateTime?
+  suggestedTime   String?
+  completedAt     DateTime?
+  interestStatus  InterestStatus?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  property  Property   @relation(fields: [propertyId], references: [id])
+  client    User       @relation("ClientVisits", fields: [clientId], references: [id])
+  transport Transport?
+
+  @@index([propertyId])
+  @@index([clientId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@map("visits")
+}
+
+model Transport {
+  id            String          @id @default(cuid())
+  visitId       String          @unique
+  driverId      String?
+  vehicleInfo   String?
+  pickupPoint   String
+  destination   String
+  scheduledAt   DateTime
+  driverContact String?
+  cost          Decimal?        @db.Decimal(12, 2)
+  status        TransportStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  visit  Visit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id])
+
+  @@map("transports")
+}
+
+model Driver {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  vehicle   String?
+  plate     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transports Transport[]
+
+  @@map("drivers")
+}
+
+model Negotiation {
+  id            String            @id @default(cuid())
+  propertyId    String
+  clientId      String
+  status        NegotiationStatus @default(OPEN)
+  agreedPrice   Decimal?          @db.Decimal(15, 2)
+  specialTerms  String?           @db.Text
+  closedAt      DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  property Property           @relation(fields: [propertyId], references: [id])
+  client   User               @relation("ClientNegotiations", fields: [clientId], references: [id])
+  offers   NegotiationOffer[]
+  contract Contract?
+
+  @@index([propertyId])
+  @@index([clientId])
+  @@index([status])
+  @@map("negotiations")
+}
+
+model NegotiationOffer {
+  id            String   @id @default(cuid())
+  negotiationId String
+  proposedBy    String
+  amount        Decimal  @db.Decimal(15, 2)
+  message       String?  @db.Text
+  isCounter     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  negotiation Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+
+  @@index([negotiationId])
+  @@map("negotiation_offers")
+}
+
+model Contract {
+  id              String         @id @default(cuid())
+  negotiationId   String?        @unique
+  propertyId      String
+  clientId         String
+  ownerId         String
+  referenceNumber String         @unique
+  monthlyRent     Decimal        @db.Decimal(15, 2)
+  durationMonths  Int
+  startDate       DateTime
+  endDate         DateTime
+  specialTerms    String?        @db.Text
+  status          ContractStatus @default(PREPARING)
+  pdfUrl          String?
+  signedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  property    Property     @relation(fields: [propertyId], references: [id])
+  client      User         @relation("ClientContracts", fields: [clientId], references: [id])
+  negotiation Negotiation? @relation(fields: [negotiationId], references: [id])
+  deal        Deal?
+
+  @@index([propertyId])
+  @@index([clientId])
+  @@index([status])
+  @@map("contracts")
+}
+
+model Deal {
+  id              String     @id @default(cuid())
+  contractId      String     @unique
+  propertyId      String
+  ownerId         String
+  clientId        String
+  referenceNumber String     @unique
+  agreedAmount    Decimal    @db.Decimal(15, 2)
+  completedAt     DateTime
+  status          DealStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  contract   Contract    @relation(fields: [contractId], references: [id])
+  property   Property    @relation(fields: [propertyId], references: [id])
+  client     User        @relation("ClientDeals", fields: [clientId], references: [id])
+  commission Commission?
+
+  @@index([propertyId])
+  @@index([status])
+  @@map("deals")
+}
+
+model Commission {
+  id               String           @id @default(cuid())
+  dealId           String           @unique
+  percentage       Decimal          @db.Decimal(5, 2)
+  fixedAmount      Decimal?         @db.Decimal(15, 2)
+  calculatedAmount Decimal          @db.Decimal(15, 2)
+  status           CommissionStatus @default(PENDING)
+  dueDate          DateTime?
+  paidAt           DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  deal     Deal      @relation(fields: [dealId], references: [id])
+  payments Payment[]
+
+  @@index([status])
+  @@map("commissions")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  commissionId  String
+  amount        Decimal       @db.Decimal(15, 2)
+  method        String?
+  reference     String?
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  commission Commission @relation(fields: [commissionId], references: [id])
+
+  @@index([commissionId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  label     String?
+  group     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
