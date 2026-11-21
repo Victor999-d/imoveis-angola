@@ -1,117 +1,94 @@
 # Imóveis Angola
 
-Plataforma digital completa de gestão e arrendamento de imóveis para o mercado angolano.
+Plataforma digital de gestão e arrendamento de imóveis para o mercado angolano.
 
-## Stack tecnológica
+**Repositório:** https://github.com/Victor999-d/imoveis-angola
 
-- **Frontend**: Next.js 15 (App Router) + React 19 + TypeScript
-- **Estilo**: Tailwind CSS 4 + shadcn/ui + Lucide Icons
-- **Backend**: Next.js API Routes + Server Actions
-- **Base de dados**: PostgreSQL + Prisma ORM
-- **Autenticação**: Auth.js (NextAuth v5) com Credentials
-- **Validação**: Zod + React Hook Form
-- **Gráficos**: Recharts
-- **Mapas**: Leaflet + OpenStreetMap
-- **PDF**: jsPDF
+## Estado actual (MVP)
 
-## Perfis de utilizador
+| Funcionalidade | Estado |
+|----------------|--------|
+| Schema Prisma completo | ✅ |
+| Autenticação (login/registo) | ✅ |
+| Middleware + RBAC | ✅ |
+| Homepage moderna | ✅ |
+| Página Explorar Imóveis | ✅ |
+| Dashboard por perfil | ✅ |
+| Sidebar + Header | ✅ |
+| Formatação Kwanza + pt-AO | ✅ |
+| Módulos avançados (visitas, contratos, financeiro...) | 🔜 Próximos |
 
-| Perfil | Descrição |
-|--------|-----------|
-| **Administrador** | Controlo total da plataforma |
-| **Proprietário** | Cadastra e gere imóveis |
-| **Cliente** | Pesquisa e solicita visitas |
+## Stack
 
-## Funcionalidades principais
+- Next.js 15 (App Router) + React 19 + TypeScript
+- Tailwind CSS 4 + shadcn/ui + Lucide
+- PostgreSQL + Prisma
+- Auth.js (NextAuth v5)
+- Zod + React Hook Form
 
-- Cadastro e verificação de imóveis
-- Pesquisa avançada com filtros e mapa
-- Sistema de visitas e transporte
-- Negociação e contratos
-- Gestão de comissões e financeiro
-- Notificações internas
-- Dashboards por perfil
-- Modo claro / escuro
-- Totalmente responsivo
-
-## Configuração local
-
-### Pré-requisitos
-
-- Node.js 20+
-- PostgreSQL 15+
-- npm ou pnpm
-
-### Instalação
+## Como correr localmente
 
 ```bash
-# 1. Entrar no projecto
+git clone https://github.com/Victor999-d/imoveis-angola.git
 cd imoveis-angola
-
-# 2. Instalar dependências
 npm install
 
-# 3. Configurar variáveis de ambiente
 cp .env.example .env
-# Editar .env com a DATABASE_URL e AUTH_SECRET
+# Edite .env:
+# DATABASE_URL="postgresql://..."
+# AUTH_SECRET="$(openssl rand -base64 32)"
 
-# 4. Gerar cliente Prisma e aplicar schema
 npx prisma generate
 npx prisma db push
 
-# 5. (Opcional) Popular dados de demonstração
-npm run db:seed
-
-# 6. Iniciar em desenvolvimento
 npm run dev
 ```
 
-A aplicação estará disponível em http://localhost:3000
+Abra http://localhost:3000
 
-### Gerar AUTH_SECRET
+## Deploy no Vercel
 
-```bash
-openssl rand -base64 32
-```
+1. Importe o repositório no [Vercel](https://vercel.com/new)
+2. Adicione as variáveis de ambiente:
+   - `DATABASE_URL` (use Neon, Supabase ou Railway)
+   - `AUTH_SECRET`
+   - `AUTH_URL` / `NEXTAUTH_URL` (URL do deploy)
+3. Deploy
 
-## Estrutura do projecto
+**Base de dados recomendada (gratuita):**
+- [Neon](https://neon.tech) ou [Supabase](https://supabase.com)
+
+## Estrutura
 
 ```
 src/
-├── app/                    # App Router
-│   ├── (auth)/             # Login, registo
-│   ├── (public)/           # Páginas públicas
-│   ├── (dashboard)/        # Painéis por perfil
-│   └── api/                # API Routes
+├── app/
+│   ├── (auth)/          # Login, Registo
+│   ├── (dashboard)/     # Painéis protegidos
+│   ├── (public)/        # Explorar, etc.
+│   └── api/auth/        # NextAuth
 ├── components/
-│   ├── ui/                 # Componentes base
-│   ├── layout/             # Header, sidebar
-│   ├── properties/         # Imóveis
-│   └── dashboard/          # Painéis
-├── lib/
-│   ├── auth.ts
-│   ├── prisma.ts
-│   ├── utils.ts
-│   └── validations.ts
-prisma/
-└── schema.prisma
+│   ├── ui/
+│   └── layout/
+├── lib/                 # auth, prisma, utils, validations
+├── actions/             # Server Actions
+└── middleware.ts
 ```
 
-## Moeda e localização
+## Perfis
 
-- Idioma: Português de Angola (pt-AO)
-- Moeda: Kwanza (AOA) — formato 250.000 Kz
-- Fuso horário: Africa/Luanda
+- **ADMIN** – Controlo total
+- **OWNER** – Proprietário (imóveis, visitas, comissões)
+- **CLIENT** – Cliente (pesquisa, visitas, favoritos)
 
-## Segurança
+## Próximos passos
 
-- Palavras-passe com bcrypt
-- RBAC (Role-Based Access Control)
-- Protecção de rotas
-- Validação frontend + backend
-- Documentos privados controlados
-- Registo de actividades
+1. CRUD completo de imóveis + upload de fotos
+2. Sistema de visitas e transporte
+3. Negociação e contratos PDF
+4. Módulo financeiro e comissões
+5. Notificações e relatórios
 
-## Licença
+---
 
-Projecto privado. Todos os direitos reservados.
+Feito com ❤️ para o mercado angolano.
