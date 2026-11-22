@@ -2,35 +2,41 @@
 session_start();
 
 define('APP_NAME', 'Imóveis Angola');
-define('APP_URL', 'http://localhost/prototipo-imoveis');
+define('APP_URL', rtrim(getenv('APP_URL') ?: 'http://127.0.0.1:8080', '/'));
 define('CURRENCY', 'Kz');
-
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'imoveis_angola');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_CHARSET', 'utf8mb4');
-define('DEFAULT_COMMISSION', 10);
-define('BANK_NAME', 'Banco de Fomento Angola (BFA)');
-define('BANK_IBAN', 'AO06 0000 0000 0000 0000 0000 0');
-define('BANK_ACCOUNT', 'Imóveis Angola, Lda');
+define('DB_PATH', __DIR__ . '/../data/imoveis.db');
+define('USE_MYSQL', getenv('USE_MYSQL') === '1');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'imoveis_angola');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 date_default_timezone_set('Africa/Luanda');
 
 function db(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
+        if (USE_MYSQL) {
+            $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+        } else {
+            $dir = dirname(DB_PATH);
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+            $pdo = new PDO('sqlite:' . DB_PATH, null, null, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            $pdo->exec('PRAGMA foreign_keys = ON');
+        }
     }
     return $pdo;
 }
 
 function formatMoney($value): string {
-    return number_format((float)$value, 0, ',', '.') . ' ' . CURRENCY;
+    return number_format((float)$value, 0, ',', '.') . ' Kz';
 }
 
 function e(?string $str): string {
@@ -80,7 +86,7 @@ function getFlash(): ?array {
 }
 
 function slugify(string $text): string {
-    $text = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+    $text = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text) ?: $text;
     $text = strtolower(preg_replace('/[^a-z0-9]+/', '-', $text));
     return trim($text, '-');
 }
