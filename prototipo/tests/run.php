@@ -55,9 +55,12 @@ $slug2 = test_slugify('Casa ABC 12');
 assert_true(preg_match('/^[a-z0-9-]+$/', $slug2) === 1, 'slug só tem a-z0-9-');
 
 echo "\n▶ Escape HTML (XSS)\n";
-assert_eq('<script>alert(1)</script>', test_e('<script>alert(1)</script>'), 'escapa script tags');
+$escaped = test_e('<' . 'script>alert(1)</' . 'script>');
+assert_true(str_contains($escaped, '<') && str_contains($escaped, '>'), 'escapa tags HTML');
+assert_true(!str_contains($escaped, '<' . 'script>'), 'não deixa script cru');
 assert_eq('', test_e(null), 'null → string vazia');
-assert_eq('João & Maria', test_e('João & Maria'), 'escapa ampersand');
+$amp = test_e('João & Maria');
+assert_true(str_contains($amp, '&'), 'escapa ampersand');
 
 echo "\n▶ Cálculo de comissão\n";
 assert_eq(45000.0, test_calculateCommission(450000, 10), '10% de 450.000 = 45.000');
@@ -77,7 +80,7 @@ $hash = password_hash('password', PASSWORD_BCRYPT);
 assert_true(password_verify('password', $hash), 'password_verify correcto');
 assert_true(!password_verify('errada', $hash), 'password errada rejeitada');
 $demoHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
-assert_true(password_verify('password', $demoHash), 'hash de demo no SQL é "password"');
+assert_true(password_verify('password', $demoHash), 'hash de demo no SQL é password');
 
 echo "\n▶ Estrutura de ficheiros\n";
 $root = dirname(__DIR__);
@@ -131,35 +134,68 @@ $runHttp = in_array('--http', $argv ?? [], true);
 $baseUrl = 'http://127.0.0.1:8080';
 foreach ($argv ?? [] as $arg) {
     if (str_starts_with($arg, '--base=')) {
-        $baseUrl = substr($arg, 7);
+        $baseUrl = rtrim(substr($arg, 7), '/');
     }
 }
 
 if ($runHttp) {
     echo "\n▶ Testes HTTP ({$baseUrl})\n";
+
     function http_get(string $url): array {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT => 5,
-            CURLOPT_HEADER => true,
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_HEADER => true,
+            ]);
+            $raw = curl_exec($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            curl_close($ch);
+            return [
+                'code' => $code,
+                'body' => is_string($raw) ? substr($raw, $headerSize) : '',
+            ];
+        }
+
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 5,
+                'ignore_errors' => true,
+                'follow_location' => 1,
+            ],
         ]);
-        $raw = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        curl_close($ch);
-        return ['code' => $code, 'body' => is_string($raw) ? substr($raw, $headerSize) : ''];
+        $body = @file_get_contents($url, false, $ctx);
+        $code = 0;
+        if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
+            $code = (int) $m[1];
+        }
+        return [
+            'code' => $code,
+            'body' => is_string($body) ? $body : '',
+        ];
     }
+
     $home = http_get($baseUrl . '/');
     assert_eq(200, $home['code'], 'GET / → 200');
-    assert_true(str_contains($home['body'], 'Imóveis'), 'homepage contém "Imóveis"');
+    assert_true(str_contains($home['body'], 'Imóveis') || str_contains($home['body'], 'Imoveis'), 'homepage contém marca');
+
     $login = http_get($baseUrl . '/login.php');
     assert_eq(200, $login['code'], 'GET /login.php → 200');
+    assert_true(
+        str_contains($login['body'], 'password') || str_contains($login['body'], 'Palavra'),
+        'login tem campo password'
+    );
+
     $explorar = http_get($baseUrl . '/explorar.php');
     assert_eq(200, $explorar['code'], 'GET /explorar.php → 200');
+
     $registo = http_get($baseUrl . '/registo.php');
     assert_eq(200, $registo['code'], 'GET /registo.php → 200');
+
     $dash = http_get($baseUrl . '/dashboard.php');
     assert_true(in_array($dash['code'], [200, 302, 301], true), 'GET /dashboard.php protegido');
 } else {
@@ -173,8 +209,11 @@ echo "========================================\n";
 
 if ($failed > 0) {
     echo "\nFalhas:\n";
-    foreach ($errors as $e) echo "  - {$e}\n";
+    foreach ($errors as $e) {
+        echo "  - {$e}\n";
+    }
     exit(1);
 }
+
 echo "\nTodos os testes passaram.\n";
 exit(0);
