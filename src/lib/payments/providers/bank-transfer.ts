@@ -22,7 +22,7 @@ export const bankTransferProvider: PaymentProvider = {
       status: "AWAITING_CONFIRMATION",
       amount: input.amount,
       currency: "AOA",
-      description: input.description,
+      description: input.description || "Transferência bancária",
       reference: input.reference,
       providerReference: ref,
       instructions: [

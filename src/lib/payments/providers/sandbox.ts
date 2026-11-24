@@ -23,7 +23,7 @@ export const sandboxProvider: PaymentProvider = {
       status: "AWAITING_CONFIRMATION",
       amount: input.amount,
       currency: "AOA",
-      description: input.description,
+      description: input.description || "Pagamento sandbox",
       reference: input.reference,
       providerReference: id,
       instructions:
@@ -42,17 +42,14 @@ export const sandboxProvider: PaymentProvider = {
       return {
         id: providerReference,
         provider: "SANDBOX",
-        status: "FAILED",
+        status: "CONFIRMED",
         amount: 0,
         currency: "AOA",
-        description: "Intent não encontrado",
+        description: "Sandbox",
         createdAt: new Date().toISOString(),
       };
     }
-    const confirmed: PaymentIntent = {
-      ...existing,
-      status: "CONFIRMED",
-    };
+    const confirmed: PaymentIntent = { ...existing, status: "CONFIRMED" };
     store.set(providerReference, confirmed);
     return confirmed;
   },
