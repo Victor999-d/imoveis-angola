@@ -1,17 +1,14 @@
-import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export default auth((req) => {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isLoggedIn = !!req.auth;
-  const role = req.auth?.user?.role;
 
   const publicRoutes = [
     "/",
     "/explorar",
     "/login",
     "/registo",
-    "/recuperar-password",
     "/sobre",
     "/contactos",
     "/termos",
@@ -21,9 +18,20 @@ export default auth((req) => {
   const isPublic =
     publicRoutes.some((r) => pathname === r || pathname.startsWith(r + "/")) ||
     pathname.startsWith("/imovel/") ||
-    pathname.startsWith("/api/auth");
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/_next") ||
+    pathname.includes(".");
 
-  const authRoutes = ["/login", "/registo", "/recuperar-password"];
+  // Sessão NextAuth (cookie)
+  const sessionToken =
+    req.cookies.get("authjs.session-token")?.value ||
+    req.cookies.get("__Secure-authjs.session-token")?.value ||
+    req.cookies.get("next-auth.session-token")?.value ||
+    req.cookies.get("__Secure-next-auth.session-token")?.value;
+
+  const isLoggedIn = !!sessionToken;
+
+  const authRoutes = ["/login", "/registo"];
   if (isLoggedIn && authRoutes.some((r) => pathname.startsWith(r))) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
@@ -34,21 +42,9 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isLoggedIn && pathname.startsWith("/admin") && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-  if (isLoggedIn && pathname.startsWith("/proprietario") && role !== "OWNER" && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-  if (isLoggedIn && pathname.startsWith("/cliente") && role !== "CLIENT" && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
   return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
