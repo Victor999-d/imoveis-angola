@@ -62,7 +62,6 @@ export async function initiateCommissionPayment(input: {
   }
 }
 
-/** Pagamento avulso (ex.: taxa de serviço / teste) */
 export async function initiateCustomPayment(input: {
   amount: number;
   method: PaymentMethod;
@@ -121,16 +120,14 @@ export async function confirmSandboxPayment(input: {
   return { success: true, intent };
 }
 
-export async function markPaymentPaidManual(input: {
-  paymentId: string;
-}) {
+export async function markPaymentPaidManual(paymentId: string) {
   const session = await auth();
   if (!session?.user || session.user.role !== "ADMIN") {
     return { error: "Apenas administradores" };
   }
 
   const payment = await prisma.payment.update({
-    where: { id: input.paymentId },
+    where: { id: paymentId },
     data: { status: "CONFIRMED", paidAt: new Date() },
   });
 

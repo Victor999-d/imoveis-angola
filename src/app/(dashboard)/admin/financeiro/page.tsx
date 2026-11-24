@@ -84,7 +84,7 @@ export default async function AdminFinanceiroPage() {
                   <td className="p-3">{p.status}</td>
                   <td className="p-3">
                     {p.status === "PENDING" && (
-                      <form action={markPaymentPaidManual.bind(null, { paymentId: p.id })}>
+                      <form action={markPaymentPaidManual.bind(null, p.id)}>
                         <button
                           type="submit"
                           className="rounded bg-green-600 px-2 py-1 text-xs text-white"
