@@ -1,47 +1,53 @@
-/**
- * Arquitectura de pagamentos - Imóveis Angola
- * Preparada para integração com serviços disponíveis em Angola.
- *
- * Métodos suportados (preparados):
- * - bank_transfer  → Transferência bancária (confirmação manual)
- * - multicaixa     → Referência Multicaixa Express (quando API disponível)
- * - unitel_money   → Unitel Money (quando API disponível)
- * - cash           → Pagamento em numerário (registo manual)
- */
-
 export type PaymentMethod =
-  | "bank_transfer"
-  | "multicaixa"
-  | "unitel_money"
-  | "cash"
-  | "other";
+  | "MULTICAIXA"
+  | "UNITEL_MONEY"
+  | "BANK_TRANSFER"
+  | "SANDBOX";
 
-export type PaymentProviderStatus = "pending" | "processing" | "confirmed" | "failed" | "cancelled";
+export type PaymentIntentStatus =
+  | "PENDING"
+  | "AWAITING_CONFIRMATION"
+  | "CONFIRMED"
+  | "FAILED"
+  | "EXPIRED"
+  | "CANCELLED";
 
 export interface CreatePaymentInput {
-  commissionId: string;
-  amount: number;
+  amount: number; // AOA
+  currency?: "AOA";
   method: PaymentMethod;
-  reference?: string;
-  notes?: string;
-  payerName?: string;
-  payerPhone?: string;
+  description: string;
+  reference?: string; // external business ref (commission id, etc.)
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  metadata?: Record<string, string>;
+  returnUrl?: string;
 }
 
-export interface PaymentResult {
-  success: boolean;
-  paymentId?: string;
-  providerReference?: string;
+export interface PaymentIntent {
+  id: string;
+  provider: PaymentMethod;
+  status: PaymentIntentStatus;
+  amount: number;
+  currency: "AOA";
+  description: string;
+  reference?: string;
+  /** Instruções / código mostrado ao utilizador */
   instructions?: string;
-  error?: string;
+  /** Código EMIS / referência Multicaixa / ID Unitel */
+  providerReference?: string;
+  /** URL de redireccionamento (se o provider suportar) */
+  checkoutUrl?: string;
+  expiresAt?: string;
+  createdAt: string;
+  metadata?: Record<string, string>;
 }
 
 export interface PaymentProvider {
-  id: PaymentMethod;
-  name: string;
-  description: string;
-  isAvailable: boolean;
-  requiresExternalApi: boolean;
-  createPayment(input: CreatePaymentInput): Promise<PaymentResult>;
-  checkStatus?(providerReference: string): Promise<PaymentProviderStatus>;
+  readonly id: PaymentMethod;
+  readonly label: string;
+  readonly description: string;
+  createIntent(input: CreatePaymentInput): Promise<PaymentIntent>;
+  verify(providerReference: string): Promise<PaymentIntent>;
 }

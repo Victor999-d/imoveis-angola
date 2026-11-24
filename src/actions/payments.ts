@@ -1,113 +1,144 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import {
-  initiatePayment,
-  confirmPayment,
-  listPaymentMethods,
-  calculateCommission,
-} from "@/lib/payments/service";
-import type { PaymentMethod } from "@/lib/payments/types";
 import { prisma } from "@/lib/prisma";
+import {
+  createPaymentIntent,
+  verifyPayment,
+  type PaymentMethod,
+} from "@/lib/payments";
 import { revalidatePath } from "next/cache";
 
-export async function getPaymentMethods() {
-  return listPaymentMethods();
-}
-
-export async function createPaymentAction(data: {
+export async function initiateCommissionPayment(input: {
   commissionId: string;
-  amount: number;
   method: PaymentMethod;
-  reference?: string;
-  notes?: string;
 }) {
   const session = await auth();
-  if (!session?.user) {
-    return { error: "Não autenticado." };
-  }
+  if (!session?.user) return { error: "Sessão inválida" };
 
-  if (session.user.role !== "ADMIN" && session.user.role !== "OWNER") {
-    return { error: "Sem permissão." };
-  }
+  const commission = await prisma.commission.findUnique({
+    where: { id: input.commissionId },
+    include: { deal: true },
+  });
 
-  const result = await initiatePayment(data);
+  if (!commission) return { error: "Comissão não encontrada" };
+  if (commission.status === "PAID") return { error: "Comissão já paga" };
 
-  if (result.success) {
+  const amount = Number(commission.calculatedAmount);
+
+  try {
+    const intent = await createPaymentIntent({
+      amount,
+      method: input.method,
+      description: `Comissão #${commission.id.slice(-8)} — Imóveis Angola`,
+      reference: commission.id,
+      customerName: session.user.name || undefined,
+      customerEmail: session.user.email || undefined,
+      metadata: {
+        commissionId: commission.id,
+        userId: session.user.id,
+      },
+    });
+
+    await prisma.payment.create({
+      data: {
+        commissionId: commission.id,
+        amount,
+        method: input.method,
+        reference: intent.providerReference || intent.id,
+        status: "PENDING",
+        notes: intent.instructions || undefined,
+      },
+    });
+
     revalidatePath("/admin/financeiro");
-    revalidatePath("/proprietario/comissoes");
-  }
+    revalidatePath("/pagamentos");
 
-  return result;
+    return { success: true, intent };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Erro ao iniciar pagamento",
+    };
+  }
 }
 
-export async function confirmPaymentAction(
-  paymentId: string,
-  notes?: string
-) {
+/** Pagamento avulso (ex.: taxa de serviço / teste) */
+export async function initiateCustomPayment(input: {
+  amount: number;
+  method: PaymentMethod;
+  description: string;
+}) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
-    return { error: "Apenas administradores podem confirmar pagamentos." };
+  if (!session?.user) return { error: "Sessão inválida" };
+  if (input.amount < 100) return { error: "Valor mínimo: 100 Kz" };
+
+  try {
+    const intent = await createPaymentIntent({
+      amount: input.amount,
+      method: input.method,
+      description: input.description || "Pagamento Imóveis Angola",
+      customerName: session.user.name || undefined,
+      customerEmail: session.user.email || undefined,
+      metadata: { userId: session.user.id },
+    });
+
+    return { success: true, intent };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Erro ao iniciar pagamento",
+    };
   }
-
-  const result = await confirmPayment(paymentId, session.user.id, notes);
-
-  if (result.success) {
-    revalidatePath("/admin/financeiro");
-    revalidatePath("/proprietario/comissoes");
-  }
-
-  return result;
 }
 
-export async function createCommissionForDeal(
-  dealId: string,
-  percentage?: number
-) {
+export async function confirmSandboxPayment(input: {
+  providerReference: string;
+  commissionId?: string;
+}) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
-    return { error: "Sem permissão." };
+  if (!session?.user) return { error: "Sessão inválida" };
+
+  const intent = await verifyPayment("SANDBOX", input.providerReference);
+
+  if (intent.status === "CONFIRMED" && input.commissionId) {
+    await prisma.payment.updateMany({
+      where: {
+        commissionId: input.commissionId,
+        reference: input.providerReference,
+      },
+      data: {
+        status: "CONFIRMED",
+        paidAt: new Date(),
+      },
+    });
+    await prisma.commission.update({
+      where: { id: input.commissionId },
+      data: { status: "PAID", paidAt: new Date() },
+    });
   }
 
-  const deal = await prisma.deal.findUnique({
-    where: { id: dealId },
-    include: { commission: true },
+  revalidatePath("/admin/financeiro");
+  revalidatePath("/pagamentos");
+  return { success: true, intent };
+}
+
+export async function markPaymentPaidManual(input: {
+  paymentId: string;
+}) {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return { error: "Apenas administradores" };
+  }
+
+  const payment = await prisma.payment.update({
+    where: { id: input.paymentId },
+    data: { status: "CONFIRMED", paidAt: new Date() },
   });
 
-  if (!deal) return { error: "Negócio não encontrado." };
-  if (deal.commission) return { error: "Já existe comissão para este negócio." };
-
-  const settings = await prisma.systemSetting.findUnique({
-    where: { key: "default_commission_percentage" },
-  });
-
-  const pct =
-    percentage ??
-    (settings?.value as number) ??
-    Number(process.env.DEFAULT_COMMISSION_PERCENTAGE || 10);
-
-  const calculated = calculateCommission(Number(deal.agreedAmount), pct);
-
-  const commission = await prisma.commission.create({
-    data: {
-      dealId,
-      percentage: pct,
-      calculatedAmount: calculated,
-      status: "PENDING",
-      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-    },
-  });
-
-  await prisma.notification.create({
-    data: {
-      userId: deal.ownerId,
-      type: "COMMISSION_PENDING",
-      title: "Comissão pendente",
-      message: `Foi registada uma comissão de ${calculated.toLocaleString("pt-AO")} Kz referente ao negócio ${deal.referenceNumber}.`,
-      link: "/proprietario/comissoes",
-    },
+  await prisma.commission.update({
+    where: { id: payment.commissionId },
+    data: { status: "PAID", paidAt: new Date() },
   });
 
   revalidatePath("/admin/financeiro");
-  return { success: true, commissionId: commission.id };
+  return { success: true };
 }
