@@ -7,6 +7,12 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+async function confirmPaymentAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("paymentId") || "");
+  if (id) await markPaymentPaidManual(id);
+}
+
 export default async function AdminFinanceiroPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "ADMIN") redirect("/dashboard");
@@ -84,7 +90,8 @@ export default async function AdminFinanceiroPage() {
                   <td className="p-3">{p.status}</td>
                   <td className="p-3">
                     {p.status === "PENDING" && (
-                      <form action={markPaymentPaidManual.bind(null, p.id)}>
+                      <form action={confirmPaymentAction}>
+                        <input type="hidden" name="paymentId" value={p.id} />
                         <button
                           type="submit"
                           className="rounded bg-green-600 px-2 py-1 text-xs text-white"
