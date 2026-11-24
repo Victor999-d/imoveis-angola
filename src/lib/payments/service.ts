@@ -6,6 +6,10 @@ import { Decimal } from "@prisma/client/runtime/library";
 export async function initiatePayment(
   input: CreatePaymentInput
 ): Promise<PaymentResult & { paymentId?: string }> {
+  if (!input.commissionId) {
+    return { success: false, error: "commissionId obrigatório" };
+  }
+
   const commission = await prisma.commission.findUnique({
     where: { id: input.commissionId },
     include: { deal: true },
@@ -25,6 +29,10 @@ export async function initiatePayment(
   }
 
   const provider = getProvider(input.method);
+  if (!provider.createPayment) {
+    return { success: false, error: "Provider inválido" };
+  }
+
   const result = await provider.createPayment({
     ...input,
     amount: input.amount || amount,
@@ -38,7 +46,7 @@ export async function initiatePayment(
     data: {
       commissionId: input.commissionId,
       amount: new Decimal(input.amount || amount),
-      method: input.method,
+      method: String(input.method),
       reference: result.providerReference || input.reference,
       status: "PENDING",
       notes: input.notes || result.instructions,
@@ -123,29 +131,13 @@ export async function confirmPayment(
     },
   });
 
-  const deal = await prisma.deal.findUnique({
-    where: { id: payment.commission.dealId },
-  });
-
-  if (deal) {
-    await prisma.notification.create({
-      data: {
-        userId: deal.ownerId,
-        type: "PAYMENT_CONFIRMED",
-        title: "Pagamento de comissão confirmado",
-        message: `O pagamento de ${Number(payment.amount).toLocaleString("pt-AO")} Kz foi confirmado.`,
-        link: "/proprietario/comissoes",
-      },
-    });
-  }
-
   return { success: true };
 }
 
 export function listPaymentMethods() {
   return getAvailableProviders().map((p) => ({
     id: p.id,
-    name: p.name,
+    name: p.name || p.label || p.id,
     description: p.description,
     requiresExternalApi: p.requiresExternalApi,
   }));

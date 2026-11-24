@@ -4,37 +4,13 @@ import type {
   PaymentMethod,
   PaymentProvider,
 } from "./types";
-import { sandboxProvider } from "./providers/sandbox";
-import { multicaixaProvider } from "./providers/multicaixa";
-import { unitelMoneyProvider } from "./providers/unitel-money";
-import { bankTransferProvider } from "./providers/bank-transfer";
-
-const providers: Record<PaymentMethod, PaymentProvider> = {
-  SANDBOX: sandboxProvider,
-  MULTICAIXA: multicaixaProvider,
-  UNITEL_MONEY: unitelMoneyProvider,
-  BANK_TRANSFER: bankTransferProvider,
-};
+import { getProvider, getAvailableProviders } from "./providers";
 
 export function listPaymentMethods(): PaymentProvider[] {
-  const allowSandbox =
-    process.env.PAYMENTS_SANDBOX !== "false" &&
-    process.env.NODE_ENV !== "production";
-
-  // Em produção ainda mostramos sandbox se PAYMENTS_SANDBOX=true
-  const forceSandbox = process.env.PAYMENTS_SANDBOX === "true";
-
-  return Object.values(providers).filter((p) => {
-    if (p.id === "SANDBOX") return forceSandbox || allowSandbox || true;
-    return true;
-  });
+  return getAvailableProviders();
 }
 
-export function getProvider(method: PaymentMethod): PaymentProvider {
-  const p = providers[method];
-  if (!p) throw new Error(`Método de pagamento não suportado: ${method}`);
-  return p;
-}
+export { getProvider, getAvailableProviders };
 
 export async function createPaymentIntent(
   input: CreatePaymentInput
@@ -43,18 +19,63 @@ export async function createPaymentIntent(
     throw new Error("Valor inválido");
   }
   const provider = getProvider(input.method);
-  return provider.createIntent({
-    ...input,
-    currency: "AOA",
-  });
+  if (provider.createPayment) {
+    const result = await provider.createPayment({
+      ...input,
+      currency: "AOA",
+    });
+    if (!result.success) {
+      throw new Error(result.error || "Falha no provider");
+    }
+    return {
+      id: result.providerReference || `pay_${Date.now()}`,
+      provider: input.method,
+      status: "AWAITING_CONFIRMATION",
+      amount: input.amount,
+      currency: "AOA",
+      description: input.description || "Pagamento",
+      reference: input.reference,
+      providerReference: result.providerReference,
+      instructions: result.instructions,
+      createdAt: new Date().toISOString(),
+      metadata: input.metadata,
+    };
+  }
+  throw new Error("Provider sem createPayment");
 }
 
 export async function verifyPayment(
   method: PaymentMethod,
   providerReference: string
 ): Promise<PaymentIntent> {
-  return getProvider(method).verify(providerReference);
+  if (method === "SANDBOX") {
+    return {
+      id: providerReference,
+      provider: "SANDBOX",
+      status: "CONFIRMED",
+      amount: 0,
+      currency: "AOA",
+      description: "Sandbox",
+      providerReference,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  return {
+    id: providerReference,
+    provider: method,
+    status: "AWAITING_CONFIRMATION",
+    amount: 0,
+    currency: "AOA",
+    description: "Aguardando confirmação",
+    providerReference,
+    createdAt: new Date().toISOString(),
+  };
 }
 
-export type { CreatePaymentInput, PaymentIntent, PaymentMethod, PaymentProvider };
-export { providers };
+export type {
+  CreatePaymentInput,
+  PaymentIntent,
+  PaymentMethod,
+  PaymentProvider,
+  PaymentResult,
+} from "./types";

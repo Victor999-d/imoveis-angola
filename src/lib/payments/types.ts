@@ -2,7 +2,12 @@ export type PaymentMethod =
   | "MULTICAIXA"
   | "UNITEL_MONEY"
   | "BANK_TRANSFER"
-  | "SANDBOX";
+  | "SANDBOX"
+  | "bank_transfer"
+  | "multicaixa"
+  | "unitel_money"
+  | "cash"
+  | "other";
 
 export type PaymentIntentStatus =
   | "PENDING"
@@ -13,16 +18,26 @@ export type PaymentIntentStatus =
   | "CANCELLED";
 
 export interface CreatePaymentInput {
-  amount: number; // AOA
+  amount: number;
   currency?: "AOA";
   method: PaymentMethod;
-  description: string;
-  reference?: string; // external business ref (commission id, etc.)
+  description?: string;
+  reference?: string;
+  commissionId?: string;
+  notes?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
   metadata?: Record<string, string>;
   returnUrl?: string;
+}
+
+export interface PaymentResult {
+  success: boolean;
+  error?: string;
+  providerReference?: string;
+  instructions?: string;
+  paymentId?: string;
 }
 
 export interface PaymentIntent {
@@ -33,11 +48,8 @@ export interface PaymentIntent {
   currency: "AOA";
   description: string;
   reference?: string;
-  /** Instruções / código mostrado ao utilizador */
   instructions?: string;
-  /** Código EMIS / referência Multicaixa / ID Unitel */
   providerReference?: string;
-  /** URL de redireccionamento (se o provider suportar) */
   checkoutUrl?: string;
   expiresAt?: string;
   createdAt: string;
@@ -46,8 +58,12 @@ export interface PaymentIntent {
 
 export interface PaymentProvider {
   readonly id: PaymentMethod;
-  readonly label: string;
+  readonly label?: string;
+  readonly name?: string;
   readonly description: string;
-  createIntent(input: CreatePaymentInput): Promise<PaymentIntent>;
-  verify(providerReference: string): Promise<PaymentIntent>;
+  readonly isAvailable?: boolean;
+  readonly requiresExternalApi?: boolean;
+  createIntent?(input: CreatePaymentInput): Promise<PaymentIntent>;
+  createPayment?(input: CreatePaymentInput): Promise<PaymentResult>;
+  verify?(providerReference: string): Promise<PaymentIntent>;
 }
